@@ -1,0 +1,33 @@
+Build a professional Regime-Based Trading App in Python using streamlit, plotly, and yfinance.
+
+Name of the app or Project - QuantPulse
+
+1. The Core Engine (HMM Logic):
+ Use hmmlearn.GaussianHMM with 7 components to detect market regimes.
+ Train on 3 features: Returns, Range (High–Low/Close), and Volume Volatility.
+Crucial: Automatically identify the 'Bull Run' state (highest positive return) and the 'Bear/Crash' state (lowest return).
+
+2. The Strategy Logic:
+ Implement a voting system with 8 Confirmations. We only enter a trade if the HMM Regime is Bullish AND at least 7 out of 8 of these conditions are met:
+RSI > 55 and RSI < 70
+Momentum > 1%
+Volatility < 6%
+ADX > 25
+Price > EMA 50
+Price > EMA 200
+MACD > Signal Line
+
+3. Risk Management Rules:
+ Cooldown: Enforce a hard 48-hour cooldown after ANY exit. The bot cannot re-enter for 48 hours to avoid chop.
+Exit Rule: Close position immediately if the Regime flips to 'Bear' or 'Crash'.
+Leverage: Simulate 2.5x Leverage on the PnL calculation.
+
+4. The Architecture:
+data_loader.py: Fetch any stocks or indices hourly data (last 730 days) using yfinance or claude LLM model.
+backtester.py: Run the simulation with 5 Lakhs INR starting capital. Log every trade.
+app.py: A Streamlit Dashboard.
+
+Top Section: Show Current Signal (Long/Cash) and Detected Regime.
+Chart: An interactive Plotly candlestick chart where the background color changes based on the detected Regime (Green for Bull, Red for Bear).
+Metrics: Display Total Return, Alpha vs Buy & Hold, Win Rate, and Max Drawdown.
+Decision-Section - Suggest the decision of Strong Buy or Strong Sell and holding time period as well. And provide the reason for the buy or sell.
