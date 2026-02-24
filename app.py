@@ -316,6 +316,7 @@ import json as _json
 _ind_json = _json.dumps({
     k: (float(v) if isinstance(v, (int, float, np.floating, np.integer)) else bool(v))
     for k, v in confs.items()
+    if k != "readings"          # 'readings' is a nested dict — exclude from LLM JSON
 })
 _met_json = _json.dumps({
     k: v for k, v in results.items()
@@ -479,18 +480,42 @@ st.markdown("<br>", unsafe_allow_html=True)
 # ── 8-CONFIRMATION BREAKDOWN
 # ---------------------------------------------------------------------------
 
-with st.expander("📊 8-Confirmation Signal Breakdown", expanded=False):
-    conf_data = {
-        k: ("✅ Yes" if v else "❌ No")
-        for k, v in confs.items()
-        if k != "total_confirmations"
-    }
-    conf_df = pd.DataFrame.from_dict(
-        conf_data, orient="index", columns=["Status"]
+with st.expander("📊 8-Confirmation Signal Breakdown", expanded=True):
+    readings = confs.get("readings", {})
+    skip     = {"total_confirmations", "readings"}
+
+    breakdown_rows = []
+    for condition, passed in confs.items():
+        if condition in skip:
+            continue
+        breakdown_rows.append({
+            "Condition": condition,
+            "Status":    "✅  Pass" if passed else "❌  Fail",
+            "Actual Value": readings.get(condition, "—"),
+        })
+
+    breakdown_df = pd.DataFrame(breakdown_rows)
+    st.dataframe(
+        breakdown_df,
+        use_container_width=True,
+        hide_index=True,
+        column_config={
+            "Status": st.column_config.TextColumn(width="small"),
+            "Actual Value": st.column_config.TextColumn(width="large"),
+        },
     )
-    conf_df.index = conf_df.index.str.replace("_", " ")
-    st.dataframe(conf_df, use_container_width=True)
-    st.info(f"Total Confirmations: **{confs['total_confirmations']} / 8**   (need ≥ 7 for LONG)")
+    total = confs["total_confirmations"]
+    if total >= 7:
+        color = "green"
+    elif total >= 5:
+        color = "orange"
+    else:
+        color = "red"
+    st.markdown(
+        f"**Confirmations: <span style='color:{color}'>{total} / 8</span>**"
+        f"   — need ≥ 7 + Bull regime for LONG entry",
+        unsafe_allow_html=True,
+    )
 
 # ---------------------------------------------------------------------------
 # ── EQUITY CURVE
