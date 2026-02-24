@@ -316,7 +316,7 @@ import json as _json
 _ind_json = _json.dumps({
     k: (float(v) if isinstance(v, (int, float, np.floating, np.integer)) else bool(v))
     for k, v in confs.items()
-    if k != "readings"          # 'readings' is a nested dict — exclude from LLM JSON
+    if k not in ("readings", "reasons")   # nested dicts — exclude from LLM JSON
 })
 _met_json = _json.dumps({
     k: v for k, v in results.items()
@@ -482,16 +482,18 @@ st.markdown("<br>", unsafe_allow_html=True)
 
 with st.expander("📊 8-Confirmation Signal Breakdown", expanded=True):
     readings = confs.get("readings", {})
-    skip     = {"total_confirmations", "readings"}
+    reasons  = confs.get("reasons",  {})
+    skip     = {"total_confirmations", "readings", "reasons"}
 
     breakdown_rows = []
     for condition, passed in confs.items():
         if condition in skip:
             continue
         breakdown_rows.append({
-            "Condition": condition,
-            "Status":    "✅  Pass" if passed else "❌  Fail",
+            "Condition":    condition,
+            "Status":       "✅  Pass" if passed else "❌  Fail",
             "Actual Value": readings.get(condition, "—"),
+            "Reasoning":    reasons.get(condition, "—"),
         })
 
     breakdown_df = pd.DataFrame(breakdown_rows)
@@ -500,8 +502,10 @@ with st.expander("📊 8-Confirmation Signal Breakdown", expanded=True):
         use_container_width=True,
         hide_index=True,
         column_config={
-            "Status": st.column_config.TextColumn(width="small"),
-            "Actual Value": st.column_config.TextColumn(width="large"),
+            "Condition":    st.column_config.TextColumn("Condition",    width="medium"),
+            "Status":       st.column_config.TextColumn("Status",       width="small"),
+            "Actual Value": st.column_config.TextColumn("Actual Value", width="medium"),
+            "Reasoning":    st.column_config.TextColumn("Reasoning",    width="large"),
         },
     )
     total = confs["total_confirmations"]

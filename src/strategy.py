@@ -160,35 +160,126 @@ def evaluate_confirmations(row: pd.Series) -> dict:
     volume   = float(row["Volume"])
     vol_ma   = float(row["Volume_MA"])
 
+    rsi_pass   = 55.0 < rsi < 70.0
+    mom_pass   = mom > 1.0
+    vol_pass   = vol_pct < 6.0
+    adx_pass   = adx > 25.0
+    ema50_pass = close > ema50
+    ema200_pass = close > ema200
+    macd_pass  = macd > macd_sig
+    vol_above  = volume > vol_ma
+
     conditions = {
-        C_RSI:    55.0 < rsi < 70.0,
-        C_MOM:    mom > 1.0,
-        C_VOL:    vol_pct < 6.0,
-        C_ADX:    adx > 25.0,
-        C_EMA50:  close > ema50,
-        C_EMA200: close > ema200,
-        C_MACD:   macd > macd_sig,
-        C_VOLUME: volume > vol_ma,
+        C_RSI:    rsi_pass,
+        C_MOM:    mom_pass,
+        C_VOL:    vol_pass,
+        C_ADX:    adx_pass,
+        C_EMA50:  ema50_pass,
+        C_EMA200: ema200_pass,
+        C_MACD:   macd_pass,
+        C_VOLUME: vol_above,
     }
 
     total = int(sum(conditions.values()))
 
-    # Actual readings for the dashboard breakdown table
+    # ── Actual numeric readings ───────────────────────────────────────────
     readings = {
-        C_RSI:    f"{rsi:.2f}  (target 55–70)",
-        C_MOM:    f"{mom:+.2f}%  (target > 1%)",
+        C_RSI:    f"{rsi:.2f}  (target 55 – 70)",
+        C_MOM:    f"{mom:+.2f}%  (target > +1%)",
         C_VOL:    f"{vol_pct:.2f}%  (target < 6%)",
         C_ADX:    f"{adx:.2f}  (target > 25)",
-        C_EMA50:  f"{close:.4f} vs {ema50:.4f}  ({(close/ema50-1)*100:+.2f}%)",
-        C_EMA200: f"{close:.4f} vs {ema200:.4f}  ({(close/ema200-1)*100:+.2f}%)",
-        C_MACD:   f"MACD {macd:.4f}  Sig {macd_sig:.4f}  Δ{macd-macd_sig:+.4f}",
-        C_VOLUME: f"{volume:,.0f} vs MA {vol_ma:,.0f}  (×{volume/vol_ma:.2f})",
+        C_EMA50:  f"Price {close:.4f}  |  EMA-50 {ema50:.4f}  ({(close/ema50-1)*100:+.2f}%)",
+        C_EMA200: f"Price {close:.4f}  |  EMA-200 {ema200:.4f}  ({(close/ema200-1)*100:+.2f}%)",
+        C_MACD:   f"MACD {macd:.4f}  |  Signal {macd_sig:.4f}  |  Δ {macd-macd_sig:+.4f}",
+        C_VOLUME: f"Vol {volume:,.0f}  |  MA-20 {vol_ma:,.0f}  (×{volume/vol_ma:.2f})",
+    }
+
+    # ── Contextual reasoning for each condition (dynamic, pass-aware) ─────
+    if rsi_pass:
+        rsi_reason = (
+            f"RSI {rsi:.1f} sits in the momentum sweet-spot (55–70): "
+            "strong bullish momentum without being overbought."
+        )
+    elif rsi < 55:
+        rsi_reason = (
+            f"RSI {rsi:.1f} is below 55 — insufficient bullish momentum. "
+            "Wait for buyers to push RSI into the 55–70 zone."
+        )
+    else:
+        rsi_reason = (
+            f"RSI {rsi:.1f} exceeds 70 — market is overbought. "
+            "Risk of a short-term pullback before continuation."
+        )
+
+    mom_reason = (
+        f"10-bar price change is {mom:+.2f}%. "
+        + ("Short-term price action is accelerating upward — confirms trend direction."
+           if mom_pass else
+           "Insufficient price gain over 10 bars. The move lacks conviction.")
+    )
+
+    vol_reason = (
+        f"ATR is {vol_pct:.2f}% of price. "
+        + ("Market conditions are calm — low noise reduces whipsaw risk on entry."
+           if vol_pass else
+           "Elevated ATR signals choppy, high-risk conditions. Wait for volatility to cool.")
+    )
+
+    adx_reason = (
+        f"ADX reads {adx:.1f}. "
+        + ("A reading above 25 confirms a strong, directional trend is in place."
+           if adx_pass else
+           "ADX below 25 indicates a weak or ranging market — trend-following entries are unreliable.")
+    )
+
+    ema50_diff = (close / ema50 - 1) * 100
+    ema50_reason = (
+        f"Price is {ema50_diff:+.2f}% relative to EMA-50. "
+        + ("Trading above EMA-50 confirms the medium-term uptrend is intact."
+           if ema50_pass else
+           "Price has crossed below EMA-50 — medium-term trend is no longer supportive.")
+    )
+
+    ema200_diff = (close / ema200 - 1) * 100
+    ema200_reason = (
+        f"Price is {ema200_diff:+.2f}% relative to EMA-200. "
+        + ("Above EMA-200 confirms the long-term bull structure is in place."
+           if ema200_pass else
+           "Price is below EMA-200 — the long-term trend is bearish. Elevated downside risk.")
+    )
+
+    macd_delta = macd - macd_sig
+    macd_reason = (
+        f"MACD Δ is {macd_delta:+.4f}. "
+        + ("MACD above its signal line shows positive short-term momentum and a bullish crossover."
+           if macd_pass else
+           "MACD is below its signal line — short-term momentum is turning negative. Avoid entry.")
+    )
+
+    vol_ratio   = volume / vol_ma
+    volume_reason = (
+        f"Volume is {vol_ratio:.2f}× its 20-bar average. "
+        + ("Above-average volume confirms strong market participation and conviction in the move."
+           if vol_above else
+           "Below-average volume suggests weak conviction. Price moves on low volume are less reliable.")
+    )
+
+    reasons = {
+        C_RSI:    rsi_reason,
+        C_MOM:    mom_reason,
+        C_VOL:    vol_reason,
+        C_ADX:    adx_reason,
+        C_EMA50:  ema50_reason,
+        C_EMA200: ema200_reason,
+        C_MACD:   macd_reason,
+        C_VOLUME: volume_reason,
     }
 
     return {
         **conditions,
         "total_confirmations": total,
         "readings": readings,
+        "reasons":  reasons,
     }
 
 
@@ -221,5 +312,6 @@ def get_latest_signal(df_with_indicators: pd.DataFrame) -> tuple[str, dict]:
         C_EMA50: False, C_EMA200: False, C_MACD: False, C_VOLUME: False,
         "total_confirmations": 0,
         "readings": {},
+        "reasons": {},
     }
     return SIGNAL_CASH, empty_confs
