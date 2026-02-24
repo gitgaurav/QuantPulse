@@ -135,6 +135,11 @@ def has_valid_indicators(row: pd.Series) -> bool:
 # Signal evaluation
 # ---------------------------------------------------------------------------
 
+def _safe_div(numerator: float, denominator: float, fallback: float = 0.0) -> float:
+    """Divide two floats, returning `fallback` when denominator is zero."""
+    return numerator / denominator if denominator != 0.0 else fallback
+
+
 def evaluate_confirmations(row: pd.Series) -> dict:
     """
     Evaluate all 8 conditions for a single bar.
@@ -188,10 +193,10 @@ def evaluate_confirmations(row: pd.Series) -> dict:
         C_MOM:    f"{mom:+.2f}%  (target > +1%)",
         C_VOL:    f"{vol_pct:.2f}%  (target < 6%)",
         C_ADX:    f"{adx:.2f}  (target > 25)",
-        C_EMA50:  f"Price {close:.4f}  |  EMA-50 {ema50:.4f}  ({(close/ema50-1)*100:+.2f}%)",
-        C_EMA200: f"Price {close:.4f}  |  EMA-200 {ema200:.4f}  ({(close/ema200-1)*100:+.2f}%)",
+        C_EMA50:  f"Price {close:.4f}  |  EMA-50 {ema50:.4f}  ({(_safe_div(close, ema50, 1.0)-1)*100:+.2f}%)",
+        C_EMA200: f"Price {close:.4f}  |  EMA-200 {ema200:.4f}  ({(_safe_div(close, ema200, 1.0)-1)*100:+.2f}%)",
         C_MACD:   f"MACD {macd:.4f}  |  Signal {macd_sig:.4f}  |  Δ {macd-macd_sig:+.4f}",
-        C_VOLUME: f"Vol {volume:,.0f}  |  MA-20 {vol_ma:,.0f}  (×{volume/vol_ma:.2f})",
+        C_VOLUME: f"Vol {volume:,.0f}  |  MA-20 {vol_ma:,.0f}  (×{_safe_div(volume, vol_ma, 0.0):.2f})",
     }
 
     # ── Contextual reasoning for each condition (dynamic, pass-aware) ─────
@@ -232,7 +237,7 @@ def evaluate_confirmations(row: pd.Series) -> dict:
            "ADX below 25 indicates a weak or ranging market — trend-following entries are unreliable.")
     )
 
-    ema50_diff = (close / ema50 - 1) * 100
+    ema50_diff = (_safe_div(close, ema50, 1.0) - 1) * 100
     ema50_reason = (
         f"Price is {ema50_diff:+.2f}% relative to EMA-50. "
         + ("Trading above EMA-50 confirms the medium-term uptrend is intact."
@@ -240,7 +245,7 @@ def evaluate_confirmations(row: pd.Series) -> dict:
            "Price has crossed below EMA-50 — medium-term trend is no longer supportive.")
     )
 
-    ema200_diff = (close / ema200 - 1) * 100
+    ema200_diff = (_safe_div(close, ema200, 1.0) - 1) * 100
     ema200_reason = (
         f"Price is {ema200_diff:+.2f}% relative to EMA-200. "
         + ("Above EMA-200 confirms the long-term bull structure is in place."
@@ -256,7 +261,7 @@ def evaluate_confirmations(row: pd.Series) -> dict:
            "MACD is below its signal line — short-term momentum is turning negative. Avoid entry.")
     )
 
-    vol_ratio   = volume / vol_ma
+    vol_ratio   = _safe_div(volume, vol_ma, 0.0)
     volume_reason = (
         f"Volume is {vol_ratio:.2f}× its 20-bar average. "
         + ("Above-average volume confirms strong market participation and conviction in the move."

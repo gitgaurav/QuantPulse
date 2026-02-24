@@ -62,9 +62,11 @@ class Trade:
         self.exit_time   = exit_time
         self.exit_price  = exit_price
         self.exit_reason = reason
-        raw_ret = (exit_price - self.entry_price) / self.entry_price
-        # Apply leverage; floor at -1.0 so capital never goes negative
-        self.pnl_pct = max(raw_ret * LEVERAGE, -1.0)
+        if self.entry_price > 0.0:
+            raw_ret = (exit_price - self.entry_price) / self.entry_price
+            self.pnl_pct = max(raw_ret * LEVERAGE, -1.0)
+        else:
+            self.pnl_pct = 0.0
         return self.pnl_pct
 
     def to_dict(self) -> dict:
@@ -129,7 +131,7 @@ class Backtester:
             regime = str(row["Regime"])
 
             # ── Mark-to-market equity (unrealised PnL while in position) ──
-            if position is not None:
+            if position is not None and position.entry_price > 0.0:
                 raw_ret = (price - position.entry_price) / position.entry_price
                 current_equity = max(capital_at_entry * (1.0 + raw_ret * LEVERAGE), 0.0)
             else:
@@ -191,13 +193,17 @@ class Backtester:
         df: pd.DataFrame,
         final_capital: float,
     ) -> dict:
-        total_return = (final_capital - INITIAL_CAPITAL) / INITIAL_CAPITAL * 100.0
+        total_return = (
+            (final_capital - INITIAL_CAPITAL) / INITIAL_CAPITAL * 100.0
+            if INITIAL_CAPITAL > 0.0 else 0.0
+        )
 
         # Buy-and-hold benchmark (same period as the backtest)
+        first_close = float(raw_data["Close"].iloc[0])
+        last_close  = float(raw_data["Close"].iloc[-1])
         bh_ret = (
-            (raw_data["Close"].iloc[-1] - raw_data["Close"].iloc[0])
-            / raw_data["Close"].iloc[0]
-            * 100.0
+            (last_close - first_close) / first_close * 100.0
+            if first_close > 0.0 else 0.0
         )
         alpha = total_return - bh_ret
 
