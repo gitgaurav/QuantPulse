@@ -164,9 +164,9 @@ class Backtester:
             if in_cooldown or position is not None:
                 continue
 
-            # ── Entry: evaluate all 8 confirmations ───────────────────────
+            # ── Entry: all 4 mandatory indicators must pass ───────────────
             confs  = evaluate_confirmations(row)
-            signal = generate_signal(regime, confs["total_confirmations"])
+            signal = generate_signal(regime, confs["mandatory_all_met"])
 
             if signal == "LONG":
                 position         = Trade(entry_time=ts, entry_price=price)

@@ -260,7 +260,13 @@ with st.sidebar:
     st.markdown("• Leverage         : 2.5×")
     st.markdown("• Cooldown         : 48 h after exit")
     st.markdown("• HMM Components   : 7")
-    st.markdown("• Min Confirmations: 7 / 8")
+    st.divider()
+    st.markdown("**Entry Rules (ALL required)**")
+    st.markdown("• HMM Regime = Bull Run")
+    st.markdown("• RSI in (55–70)")
+    st.markdown("• Supertrend Bullish")
+    st.markdown("• Price > EMA 200")
+    st.markdown("• MACD > Signal")
     st.divider()
     st.caption("Powered by **Claude claude-opus-4-6** · [Anthropic](https://anthropic.com)")
 
@@ -313,10 +319,11 @@ current_price: float = float(df_full["Close"].iloc[-1])
 
 import json as _json
 
+_SKIP_FROM_LLM = {"mandatory", "optional", "readings", "reasons"}
 _ind_json = _json.dumps({
     k: (float(v) if isinstance(v, (int, float, np.floating, np.integer)) else bool(v))
     for k, v in confs.items()
-    if k not in ("readings", "reasons")   # nested dicts — exclude from LLM JSON
+    if k not in _SKIP_FROM_LLM
 })
 _met_json = _json.dumps({
     k: v for k, v in results.items()
@@ -480,46 +487,66 @@ st.markdown("<br>", unsafe_allow_html=True)
 # ── 8-CONFIRMATION BREAKDOWN
 # ---------------------------------------------------------------------------
 
-with st.expander("📊 8-Confirmation Signal Breakdown", expanded=True):
-    readings = confs.get("readings", {})
-    reasons  = confs.get("reasons",  {})
-    skip     = {"total_confirmations", "readings", "reasons"}
+with st.expander("📊 Indicator Breakdown — Mandatory & Optional", expanded=True):
+    readings  = confs.get("readings",  {})
+    reasons   = confs.get("reasons",   {})
+    mandatory = confs.get("mandatory", {})
+    optional  = confs.get("optional",  {})
 
-    breakdown_rows = []
-    for condition, passed in confs.items():
-        if condition in skip:
-            continue
-        breakdown_rows.append({
-            "Condition":    condition,
-            "Status":       "✅  Pass" if passed else "❌  Fail",
-            "Actual Value": readings.get(condition, "—"),
-            "Reasoning":    reasons.get(condition, "—"),
-        })
+    col_config = {
+        "Condition":    st.column_config.TextColumn("Condition",    width="medium"),
+        "Status":       st.column_config.TextColumn("Status",       width="small"),
+        "Actual Value": st.column_config.TextColumn("Actual Value", width="medium"),
+        "Reasoning":    st.column_config.TextColumn("Reasoning",    width="large"),
+    }
 
-    breakdown_df = pd.DataFrame(breakdown_rows)
-    st.dataframe(
-        breakdown_df,
-        use_container_width=True,
-        hide_index=True,
-        column_config={
-            "Condition":    st.column_config.TextColumn("Condition",    width="medium"),
-            "Status":       st.column_config.TextColumn("Status",       width="small"),
-            "Actual Value": st.column_config.TextColumn("Actual Value", width="medium"),
-            "Reasoning":    st.column_config.TextColumn("Reasoning",    width="large"),
-        },
-    )
-    total = confs["total_confirmations"]
-    if total >= 7:
-        color = "green"
-    elif total >= 5:
-        color = "orange"
-    else:
-        color = "red"
+    def _build_rows(conditions: dict) -> pd.DataFrame:
+        return pd.DataFrame([
+            {
+                "Condition":    cond,
+                "Status":       "✅  Pass" if passed else "❌  Fail",
+                "Actual Value": readings.get(cond, "—"),
+                "Reasoning":    reasons.get(cond, "—"),
+            }
+            for cond, passed in conditions.items()
+        ])
+
+    # ── Mandatory section ─────────────────────────────────────────────────
+    m_count = confs.get("mandatory_count", 0)
+    m_color = "green" if m_count == 4 else "red"
     st.markdown(
-        f"**Confirmations: <span style='color:{color}'>{total} / 8</span>**"
-        f"   — need ≥ 7 + Bull regime for LONG entry",
+        f"#### 🔴 Mandatory Indicators "
+        f"<span style='color:{m_color}'>({m_count} / 4 passed)</span>"
+        f" — **ALL must pass for a LONG entry**",
         unsafe_allow_html=True,
     )
+    st.dataframe(_build_rows(mandatory), use_container_width=True,
+                 hide_index=True, column_config=col_config)
+
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    # ── Optional section ──────────────────────────────────────────────────
+    o_count = confs.get("optional_count", 0)
+    st.markdown(
+        f"#### 📊 Optional Indicators "
+        f"({o_count} / 5 passed)"
+        f" — *for analysis only, do not affect trade decision*",
+    )
+    st.dataframe(_build_rows(optional), use_container_width=True,
+                 hide_index=True, column_config=col_config)
+
+    # ── Summary ───────────────────────────────────────────────────────────
+    st.markdown("<br>", unsafe_allow_html=True)
+    all_met  = confs.get("mandatory_all_met", False)
+    bull     = current_regime == "Bull Run"
+    entry_ok = all_met and bull
+    if entry_ok:
+        st.success("All 4 mandatory indicators pass + Bull regime → **LONG entry criteria met**")
+    elif not bull:
+        st.warning(f"Regime is **{current_regime}** — Bull Run required for entry")
+    else:
+        failing = [c for c, v in mandatory.items() if not v]
+        st.error(f"Mandatory failures: {', '.join(failing)}")
 
 # ---------------------------------------------------------------------------
 # ── EQUITY CURVE
