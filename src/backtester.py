@@ -28,6 +28,8 @@ from src.strategy import (
     evaluate_confirmations,
     generate_signal,
     has_valid_indicators,
+    SIGNAL_BUY,
+    SIGNAL_STRONG_BUY,
 )
 
 # ---------------------------------------------------------------------------
@@ -164,11 +166,11 @@ class Backtester:
             if in_cooldown or position is not None:
                 continue
 
-            # ── Entry: all 4 mandatory indicators must pass ───────────────
+            # ── Entry: BUY (4/5) or STRONG BUY (5/5) mandatory pass ──────
             confs  = evaluate_confirmations(row)
-            signal = generate_signal(regime, confs["mandatory_all_met"])
+            signal = generate_signal(regime, confs["mandatory_count"])
 
-            if signal == "LONG":
+            if signal in (SIGNAL_BUY, SIGNAL_STRONG_BUY):
                 position         = Trade(entry_time=ts, entry_price=price)
                 capital_at_entry = capital
 

@@ -39,8 +39,9 @@ import ta
 
 from src.regime_engine import REGIME_BULL
 
-SIGNAL_LONG = "LONG"
-SIGNAL_CASH = "CASH"
+SIGNAL_STRONG_BUY = "STRONG BUY"
+SIGNAL_BUY        = "BUY"
+SIGNAL_CASH       = "CASH"
 
 # ── Condition label constants ────────────────────────────────────────────────
 # Mandatory (Layer 2)
@@ -307,7 +308,7 @@ def evaluate_confirmations(row: pd.Series) -> dict:
         C_ADX:    adx_pass,
     }
     mandatory_count   = int(sum(mandatory.values()))
-    mandatory_all_met = mandatory_count == 5
+    mandatory_all_met = mandatory_count >= 4   # eligible for BUY or STRONG BUY
 
     # ── Layer 3: Optional conditions ─────────────────────────────────────
     mom_pass   = mom > 1.0
@@ -444,15 +445,18 @@ def evaluate_confirmations(row: pd.Series) -> dict:
 # Layer 2 — Signal Generation
 # ---------------------------------------------------------------------------
 
-def generate_signal(regime: str, mandatory_all_met: bool) -> str:
+def generate_signal(regime: str, mandatory_count: int) -> str:
     """
-    Return LONG only when:
-      • HMM regime is Bull Run
-      • ALL 4 mandatory indicators pass (RSI, Supertrend, EMA-200, MACD)
-    Otherwise return CASH.
+    Return signal based on regime and how many mandatory indicators pass:
+      • STRONG BUY — Bull Run + all 5 mandatory pass
+      • BUY        — Bull Run + exactly 4 mandatory pass
+      • CASH       — anything else (regime not Bull, or < 4 mandatory)
     """
-    if regime == REGIME_BULL and mandatory_all_met:
-        return SIGNAL_LONG
+    if regime == REGIME_BULL:
+        if mandatory_count >= 5:
+            return SIGNAL_STRONG_BUY
+        if mandatory_count >= 4:
+            return SIGNAL_BUY
     return SIGNAL_CASH
 
 
@@ -465,7 +469,7 @@ def get_latest_signal(df_with_indicators: pd.DataFrame) -> tuple[str, dict]:
         row = df_with_indicators.iloc[i]
         if has_valid_indicators(row):
             confs = evaluate_confirmations(row)
-            sig   = generate_signal(row["Regime"], confs["mandatory_all_met"])
+            sig   = generate_signal(row["Regime"], confs["mandatory_count"])
             return sig, confs
 
     # Fallback — dataset too short for any valid bar
