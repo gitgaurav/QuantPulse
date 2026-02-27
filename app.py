@@ -267,6 +267,7 @@ with st.sidebar:
     st.markdown("• Supertrend Bullish")
     st.markdown("• Price > EMA 200")
     st.markdown("• MACD > Signal")
+    st.markdown("• ADX > 25")
     st.divider()
     st.caption("Powered by **Claude claude-opus-4-6** · [Anthropic](https://anthropic.com)")
 

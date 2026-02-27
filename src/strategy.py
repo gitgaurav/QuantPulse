@@ -56,8 +56,8 @@ C_ADX    = "ADX > 25"
 C_EMA50  = "Price > EMA 50"
 C_VOLUME = "Volume > MA(20)"
 
-MANDATORY_CONDITIONS = [C_RSI, C_ST, C_EMA200, C_MACD]
-OPTIONAL_CONDITIONS  = [C_MOM, C_VOL, C_ADX, C_EMA50, C_VOLUME]
+MANDATORY_CONDITIONS = [C_RSI, C_ST, C_EMA200, C_MACD, C_ADX]
+OPTIONAL_CONDITIONS  = [C_MOM, C_VOL, C_EMA50, C_VOLUME]
 
 # All DataFrame columns that must be finite before any evaluation
 REQUIRED_INDICATOR_COLS = [
@@ -297,27 +297,27 @@ def evaluate_confirmations(row: pd.Series) -> dict:
     st_pass   = st_dir > 0.0                # Supertrend bullish (direction = 1)
     e200_pass = close > ema200
     macd_pass = macd > macd_sig
+    adx_pass  = adx > 25.0
 
     mandatory = {
         C_RSI:    rsi_pass,
         C_ST:     st_pass,
         C_EMA200: e200_pass,
         C_MACD:   macd_pass,
+        C_ADX:    adx_pass,
     }
     mandatory_count   = int(sum(mandatory.values()))
-    mandatory_all_met = mandatory_count == 4
+    mandatory_all_met = mandatory_count == 5
 
     # ── Layer 3: Optional conditions ─────────────────────────────────────
     mom_pass   = mom > 1.0
     vol_pass   = vol_pct < 6.0
-    adx_pass   = adx > 25.0
     ema50_pass = close > ema50
     vol_above  = volume > vol_ma
 
     optional = {
         C_MOM:    mom_pass,
         C_VOL:    vol_pass,
-        C_ADX:    adx_pass,
         C_EMA50:  ema50_pass,
         C_VOLUME: vol_above,
     }
@@ -334,9 +334,9 @@ def evaluate_confirmations(row: pd.Series) -> dict:
         C_ST:     f"ST {st_line:.4f}  |  Price {close:.4f}  |  {st_label}",
         C_EMA200: f"Price {close:.4f}  |  EMA-200 {ema200:.4f}  ({e200_diff:+.2f}%)",
         C_MACD:   f"MACD {macd:.4f}  |  Signal {macd_sig:.4f}  |  Δ {macd-macd_sig:+.4f}",
+        C_ADX:    f"{adx:.2f}  (target > 25)",
         C_MOM:    f"{mom:+.2f}%  (target > +1%)",
         C_VOL:    f"{vol_pct:.2f}%  (target < 6%)",
-        C_ADX:    f"{adx:.2f}  (target > 25)",
         C_EMA50:  f"Price {close:.4f}  |  EMA-50 {ema50:.4f}  ({e50_diff:+.2f}%)",
         C_VOLUME: f"Vol {volume:,.0f}  |  MA-20 {vol_ma:,.0f}  (×{vol_ratio:.2f})",
     }
@@ -382,6 +382,13 @@ def evaluate_confirmations(row: pd.Series) -> dict:
            "MACD is below Signal — short-term momentum is negative. Avoid new long entries.")
     )
 
+    adx_reason = (
+        f"ADX reads {adx:.1f}. "
+        + ("A reading above 25 confirms a strong, directional trend — mandatory for entry."
+           if adx_pass else
+           "ADX below 25 indicates a weak or ranging market. Entry blocked until trend strengthens.")
+    )
+
     mom_reason = (
         f"10-bar price change is {mom:+.2f}%. "
         + ("Short-term price action is accelerating upward — confirms trend direction."
@@ -394,13 +401,6 @@ def evaluate_confirmations(row: pd.Series) -> dict:
         + ("Market conditions are calm — low noise reduces whipsaw risk on entry."
            if vol_pass else
            "Elevated ATR signals choppy conditions. Wait for volatility to subside.")
-    )
-
-    adx_reason = (
-        f"ADX reads {adx:.1f}. "
-        + ("A reading above 25 confirms a strong, directional trend is in place."
-           if adx_pass else
-           "ADX below 25 indicates a weak or ranging market — trend signals are less reliable.")
     )
 
     e50_reason = (
@@ -422,9 +422,9 @@ def evaluate_confirmations(row: pd.Series) -> dict:
         C_ST:     st_reason,
         C_EMA200: e200_reason,
         C_MACD:   macd_reason,
+        C_ADX:    adx_reason,
         C_MOM:    mom_reason,
         C_VOL:    vol_reason,
-        C_ADX:    adx_reason,
         C_EMA50:  e50_reason,
         C_VOLUME: volume_reason,
     }
