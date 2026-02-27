@@ -41,29 +41,54 @@ class RegimeEngine:
 
     def _build_features(self, data: pd.DataFrame) -> np.ndarray:
         close = data["Close"].values.astype(float)
-        high = data["High"].values.astype(float)
-        low = data["Low"].values.astype(float)
+        high  = data["High"].values.astype(float)
+        low   = data["Low"].values.astype(float)
         volume = data["Volume"].values.astype(float)
 
         # Feature 1: log returns
-        log_c = np.log(np.clip(close, 1e-10, None))
+        log_c   = np.log(np.clip(close, 1e-10, None))
         returns = np.diff(log_c, prepend=log_c[0])
 
         # Feature 2: normalised intrabar range
         price_range = (high - low) / np.clip(close, 1e-10, None)
 
-        # Feature 3: rolling std of log-volume changes (window = 5)
-        log_vol = np.log(volume + 1.0)
-        vol_diff = np.diff(log_vol, prepend=log_vol[0])
-        vol_vol = (
-            pd.Series(vol_diff)
-            .rolling(window=5, min_periods=1)
-            .std()
-            .fillna(0.0)
-            .values
-        )
+        # Feature 3: volume volatility — OR — return volatility fallback
+        #
+        # Indices (^NSEI, ^GSPC, ^NDX …) report Volume = 0 for every bar.
+        # Rolling std of log-volume changes on an all-zero series is also
+        # zero, giving the feature zero variance across the entire dataset.
+        # A zero-variance feature makes the HMM covariance matrix singular
+        # ("covars must be symmetric, positive-definite").
+        #
+        # Fix: when volume has negligible variance (std < 1), substitute
+        # the rolling std of log-returns — always meaningful for any asset.
+        if np.std(volume) > 1.0:
+            log_vol  = np.log(volume + 1.0)
+            vol_diff = np.diff(log_vol, prepend=log_vol[0])
+            feature3 = (
+                pd.Series(vol_diff)
+                .rolling(window=5, min_periods=1)
+                .std()
+                .fillna(0.0)
+                .values
+            )
+        else:
+            # Price-based volatility proxy: rolling std of log-returns
+            fallback_fill = float(np.abs(returns).mean()) or 1e-6
+            feature3 = (
+                pd.Series(returns)
+                .rolling(window=5, min_periods=1)
+                .std()
+                .fillna(fallback_fill)
+                .values
+            )
 
-        return np.column_stack([returns, price_range, vol_vol])
+        features = np.column_stack([returns, price_range, feature3])
+
+        # Sanitise: replace NaN / ±Inf that could still appear for exotic data
+        features = np.nan_to_num(features, nan=0.0, posinf=0.0, neginf=0.0)
+
+        return features
 
     # ------------------------------------------------------------------
     # Training
@@ -74,14 +99,26 @@ class RegimeEngine:
         features = self._build_features(data)
         scaled = self.scaler.fit_transform(features)
 
-        self.model = hmm.GaussianHMM(
-            n_components=self.n_components,
-            covariance_type="full",
-            n_iter=200,
-            random_state=self.random_state,
-            tol=1e-4,
-        )
-        self.model.fit(scaled)
+        def _make_model(covariance_type: str) -> hmm.GaussianHMM:
+            return hmm.GaussianHMM(
+                n_components=self.n_components,
+                covariance_type=covariance_type,
+                n_iter=200,
+                random_state=self.random_state,
+                tol=1e-4,
+                min_covar=1e-2,
+            )
+
+        try:
+            model = _make_model("full")
+            model.fit(scaled)
+        except Exception:
+            # "full" covariance failed (e.g. near-singular matrix for some assets);
+            # fall back to the more numerically stable diagonal covariance.
+            model = _make_model("diag")
+            model.fit(scaled)
+
+        self.model = model
 
         # Identify bull/bear states from the unscaled mean returns
         unscaled_means = self.scaler.inverse_transform(self.model.means_)
