@@ -471,11 +471,29 @@ current_price: float  = float(df_full["Close"].iloc[-1])
 
 import json as _json
 
-_SKIP_FROM_LLM = {"mandatory", "optional", "readings", "reasons"}
+# Build indicator payload — include actual numeric values from the last valid row
+# so the LLM prompt receives real RSI/ADX/etc. instead of N/A.
+_last_row = df_full.iloc[-1]
+def _safe_float(val, default=0.0):
+    try:
+        f = float(val)
+        return f if np.isfinite(f) else default
+    except Exception:
+        return default
+
 _ind_json = _json.dumps({
-    k: (float(v) if isinstance(v, (int, float, np.floating, np.integer)) else bool(v))
-    for k, v in confs.items()
-    if k not in _SKIP_FROM_LLM
+    "mandatory_count":   confs.get("mandatory_count", 0),
+    "mandatory_all_met": confs.get("mandatory_all_met", False),
+    "core_3_met":        confs.get("core_3_met", False),
+    "optional_count":    confs.get("optional_count", 0),
+    "RSI":               round(_safe_float(_last_row.get("RSI")), 2),
+    "ADX":               round(_safe_float(_last_row.get("ADX")), 2),
+    "Momentum":          round(_safe_float(_last_row.get("Momentum")), 2),
+    "Volatility":        round(_safe_float(_last_row.get("Volatility")), 2),
+    "Above_EMA50":       bool(_safe_float(_last_row.get("Close")) > _safe_float(_last_row.get("EMA_50"), 1)),
+    "Above_EMA200":      bool(_safe_float(_last_row.get("Close")) > _safe_float(_last_row.get("EMA_200"), 1)),
+    "MACD_bullish":      bool(_safe_float(_last_row.get("MACD")) > _safe_float(_last_row.get("MACD_Signal"))),
+    "Supertrend_bullish": bool(_safe_float(_last_row.get("Supertrend_Dir")) > 0),
 })
 _met_json = _json.dumps({
     k: v for k, v in results.items()
@@ -656,7 +674,10 @@ confidence = recommendation.get("confidence", 0)
 reason     = recommendation.get("reason", "")
 risks      = recommendation.get("key_risks", [])
 
-if "Buy" in decision:
+if decision == "Strong Buy":
+    card_class = "decision-buy"
+    icon = "🟢🟢"
+elif decision == "Buy":
     card_class = "decision-buy"
     icon = "🟢"
 elif "Sell" in decision:
