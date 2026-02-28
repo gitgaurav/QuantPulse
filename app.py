@@ -406,13 +406,19 @@ with st.sidebar:
     st.markdown("• Cooldown         : 48 h after exit")
     st.markdown("• HMM Components   : 7")
     st.divider()
-    st.markdown("**Entry Rules (ALL required)**")
+    st.markdown("**Entry Rules**")
+    st.markdown("🟢 **STRONG BUY** (all 4 pass):")
     st.markdown("• HMM Regime = Bull Run")
     st.markdown("• RSI in (55–70)")
     st.markdown("• Supertrend Bullish")
     st.markdown("• Price > EMA 200")
-    st.markdown("• MACD > Signal")
     st.markdown("• ADX > 25")
+    st.markdown("🟡 **BUY** (core 3 pass):")
+    st.markdown("• HMM Regime = Bull Run")
+    st.markdown("• RSI in (55–70)")
+    st.markdown("• Supertrend Bullish")
+    st.markdown("• ADX > 25")
+    st.markdown("*(EMA 200 may fail)*")
     st.divider()
     st.caption("Powered by **Claude claude-opus-4-6** · [Anthropic](https://anthropic.com)")
 
@@ -504,9 +510,9 @@ progress.empty()
 # One-liner explanation for the Current Signal card
 m_count = confs.get("mandatory_count", 0)
 if current_signal == SIGNAL_STRONG_BUY:
-    signal_note = "All 5/5 mandatory indicators pass — highest conviction entry"
+    signal_note = "All 4/4 mandatory pass (RSI + Supertrend + EMA 200 + ADX) — highest conviction"
 elif current_signal == SIGNAL_BUY:
-    signal_note = "4/5 mandatory indicators pass — valid entry with one caution"
+    signal_note = "Core 3/3 pass (RSI + Supertrend + ADX) — EMA 200 not confirmed"
 else:
     if current_regime == REGIME_BEAR:
         signal_note = "Bear/Crash regime detected — no long entries permitted"
@@ -516,7 +522,7 @@ else:
         failing = [c for c, v in confs.get("mandatory", {}).items() if not v]
         if failing:
             short_fail = [c.split("(")[0].strip() for c in failing[:2]]
-            signal_note = f"Only {m_count}/5 pass — blocked by: {', '.join(short_fail)}"
+            signal_note = f"Core 3 not met — blocked by: {', '.join(short_fail)}"
         else:
             signal_note = "Insufficient indicator history — still warming up"
 
@@ -711,11 +717,11 @@ with st.expander("📊 Indicator Breakdown — Mandatory & Optional", expanded=T
 
     # ── Mandatory section ─────────────────────────────────────────────────
     m_count = confs.get("mandatory_count", 0)
-    m_color = "green" if m_count == 5 else "red"
+    m_color = "green" if m_count == 4 else "orange" if m_count == 3 else "red"
     st.markdown(
         f"#### 🔴 Mandatory Indicators "
-        f"<span style='color:{m_color}'>({m_count} / 5 passed)</span>"
-        f" — **ALL must pass for a LONG entry**",
+        f"<span style='color:{m_color}'>({m_count} / 4 passed)</span>"
+        f" — **4/4 = STRONG BUY · 3/4 with RSI+ST+ADX = BUY**",
         unsafe_allow_html=True,
     )
     st.dataframe(_build_rows(mandatory), use_container_width=True,
@@ -727,7 +733,7 @@ with st.expander("📊 Indicator Breakdown — Mandatory & Optional", expanded=T
     o_count = confs.get("optional_count", 0)
     st.markdown(
         f"#### 📊 Optional Indicators "
-        f"({o_count} / 4 passed)"
+        f"({o_count} / 5 passed)"
         f" — *for analysis only, do not affect trade decision*",
     )
     st.dataframe(_build_rows(optional), use_container_width=True,
@@ -737,15 +743,14 @@ with st.expander("📊 Indicator Breakdown — Mandatory & Optional", expanded=T
     st.markdown("<br>", unsafe_allow_html=True)
     bull = current_regime == REGIME_BULL
     if current_signal == SIGNAL_STRONG_BUY:
-        st.success("5/5 mandatory pass + Bull regime → **STRONG BUY** — highest conviction entry")
+        st.success("4/4 mandatory pass + Bull regime → **STRONG BUY** — all confirmations met")
     elif current_signal == SIGNAL_BUY:
-        failing = [c for c, v in mandatory.items() if not v]
-        st.info(f"4/5 mandatory pass + Bull regime → **BUY** — one caution: {', '.join(failing)}")
+        st.info("RSI + Supertrend + ADX pass + Bull regime → **BUY** — EMA 200 not confirmed (elevated risk)")
     elif not bull:
         st.warning(f"Regime is **{current_regime}** — Bull Run required for entry")
     else:
         failing = [c for c, v in mandatory.items() if not v]
-        st.error(f"Only {m_count}/5 mandatory pass — need ≥4 for entry. Failing: {', '.join(failing)}")
+        st.error(f"Core 3 not met ({m_count}/4 mandatory pass) — blocked by: {', '.join(failing)}")
 
 # ---------------------------------------------------------------------------
 # ── EQUITY CURVE

@@ -6,24 +6,22 @@ Layer 1 — Indicator Calculation
     Computes all 9 indicators: RSI, Supertrend, EMA-50, EMA-200, MACD,
     Momentum, ATR Volatility, ADX, Volume MA.
 
-Layer 2 — Mandatory Decision Logic  (4 indicators, ALL must pass)
-    RSI in (55–70)      — momentum sweet-spot
-    Supertrend Bullish  — price above Supertrend line (trend confirmed)
-    Price > EMA 200     — long-term bull structure intact
-    MACD > Signal       — short-term momentum positive
+Layer 2 — Mandatory Decision Logic
+    4 mandatory indicators (RSI, Supertrend, EMA-200, ADX).
 
-    Entry signal = LONG  iff  HMM regime == "Bull Run"
-                             AND all 4 mandatory conditions are True.
-    Any single mandatory failure → CASH / no trade.
+    Signal tiers (HMM regime must be Bull Run in all cases):
+      STRONG BUY — all 4 mandatory pass (RSI + Supertrend + EMA-200 + ADX)
+      BUY        — core 3 pass (RSI + Supertrend + ADX); EMA-200 may fail
+      CASH       — core 3 not met, or regime is not Bull Run
 
 Layer 3 — Optional Analytical Indicators  (5 indicators, display only)
     Momentum > 1%       — short-term acceleration
     ATR Volatility < 6% — calm market conditions
-    ADX > 25            — trend strength
+    MACD > Signal       — short-term momentum crossover
     Price > EMA 50      — medium-term trend
     Volume > MA(20)     — volume participation
 
-    These are computed, shown in the breakdown table, but do NOT affect
+    These are computed and shown in the breakdown table but do NOT affect
     the final trade decision.
 
 Supertrend
@@ -57,8 +55,8 @@ C_ADX    = "ADX > 25"
 C_EMA50  = "Price > EMA 50"
 C_VOLUME = "Volume > MA(20)"
 
-MANDATORY_CONDITIONS = [C_RSI, C_ST, C_EMA200, C_MACD, C_ADX]
-OPTIONAL_CONDITIONS  = [C_MOM, C_VOL, C_EMA50, C_VOLUME]
+MANDATORY_CONDITIONS = [C_RSI, C_ST, C_EMA200, C_ADX]
+OPTIONAL_CONDITIONS  = [C_MOM, C_VOL, C_MACD, C_EMA50, C_VOLUME]
 
 # All DataFrame columns that must be finite before any evaluation
 REQUIRED_INDICATOR_COLS = [
@@ -293,24 +291,24 @@ def evaluate_confirmations(row: pd.Series) -> dict:
     volume   = float(row["Volume"])
     vol_ma   = float(row["Volume_MA"])
 
-    # ── Layer 2: Mandatory conditions ────────────────────────────────────
+    # ── Layer 2: Mandatory conditions (RSI, Supertrend, EMA-200, ADX) ────
     rsi_pass  = 55.0 < rsi < 70.0
     st_pass   = st_dir > 0.0                # Supertrend bullish (direction = 1)
     e200_pass = close > ema200
-    macd_pass = macd > macd_sig
     adx_pass  = adx > 25.0
 
     mandatory = {
         C_RSI:    rsi_pass,
         C_ST:     st_pass,
         C_EMA200: e200_pass,
-        C_MACD:   macd_pass,
         C_ADX:    adx_pass,
     }
     mandatory_count   = int(sum(mandatory.values()))
-    mandatory_all_met = mandatory_count >= 4   # eligible for BUY or STRONG BUY
+    mandatory_all_met = mandatory_count == 4        # all 4 mandatory pass → STRONG BUY eligible
+    core_3_met        = rsi_pass and st_pass and adx_pass  # BUY eligible (EMA-200 may fail)
 
-    # ── Layer 3: Optional conditions ─────────────────────────────────────
+    # ── Layer 3: Optional conditions (MACD moved here) ───────────────────
+    macd_pass  = macd > macd_sig
     mom_pass   = mom > 1.0
     vol_pass   = vol_pct < 6.0
     ema50_pass = close > ema50
@@ -319,6 +317,7 @@ def evaluate_confirmations(row: pd.Series) -> dict:
     optional = {
         C_MOM:    mom_pass,
         C_VOL:    vol_pass,
+        C_MACD:   macd_pass,
         C_EMA50:  ema50_pass,
         C_VOLUME: vol_above,
     }
@@ -435,6 +434,7 @@ def evaluate_confirmations(row: pd.Series) -> dict:
         "optional":          optional,
         "mandatory_all_met": mandatory_all_met,
         "mandatory_count":   mandatory_count,
+        "core_3_met":        core_3_met,
         "optional_count":    optional_count,
         "readings":          readings,
         "reasons":           reasons,
@@ -445,17 +445,17 @@ def evaluate_confirmations(row: pd.Series) -> dict:
 # Layer 2 — Signal Generation
 # ---------------------------------------------------------------------------
 
-def generate_signal(regime: str, mandatory_count: int) -> str:
+def generate_signal(regime: str, mandatory_count: int, core_3_met: bool) -> str:
     """
-    Return signal based on regime and how many mandatory indicators pass:
-      • STRONG BUY — Bull Run + all 5 mandatory pass
-      • BUY        — Bull Run + exactly 4 mandatory pass
-      • CASH       — anything else (regime not Bull, or < 4 mandatory)
+    Return signal based on regime and mandatory indicator results:
+      • STRONG BUY — Bull Run + all 4 mandatory pass (RSI + ST + EMA-200 + ADX)
+      • BUY        — Bull Run + core 3 pass (RSI + ST + ADX); EMA-200 may fail
+      • CASH       — regime not Bull Run, or core 3 not met
     """
     if regime == REGIME_BULL:
-        if mandatory_count >= 5:
-            return SIGNAL_STRONG_BUY
         if mandatory_count >= 4:
+            return SIGNAL_STRONG_BUY
+        if core_3_met:
             return SIGNAL_BUY
     return SIGNAL_CASH
 
@@ -469,7 +469,7 @@ def get_latest_signal(df_with_indicators: pd.DataFrame) -> tuple[str, dict]:
         row = df_with_indicators.iloc[i]
         if has_valid_indicators(row):
             confs = evaluate_confirmations(row)
-            sig   = generate_signal(row["Regime"], confs["mandatory_count"])
+            sig   = generate_signal(row["Regime"], confs["mandatory_count"], confs["core_3_met"])
             return sig, confs
 
     # Fallback — dataset too short for any valid bar
@@ -478,6 +478,7 @@ def get_latest_signal(df_with_indicators: pd.DataFrame) -> tuple[str, dict]:
         "optional":          dict.fromkeys(OPTIONAL_CONDITIONS,  False),
         "mandatory_all_met": False,
         "mandatory_count":   0,
+        "core_3_met":        False,
         "optional_count":    0,
         "readings":          {},
         "reasons":           {},

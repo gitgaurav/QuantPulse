@@ -166,9 +166,9 @@ class Backtester:
             if in_cooldown or position is not None:
                 continue
 
-            # ── Entry: BUY (4/5) or STRONG BUY (5/5) mandatory pass ──────
+            # ── Entry: BUY (core 3) or STRONG BUY (all 4 mandatory) ─────
             confs  = evaluate_confirmations(row)
-            signal = generate_signal(regime, confs["mandatory_count"])
+            signal = generate_signal(regime, confs["mandatory_count"], confs["core_3_met"])
 
             if signal in (SIGNAL_BUY, SIGNAL_STRONG_BUY):
                 position         = Trade(entry_time=ts, entry_price=price)
