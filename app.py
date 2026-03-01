@@ -525,32 +525,38 @@ progress.empty()
 # ── TOP ROW:  Signal  |  Regime  |  Price
 # ---------------------------------------------------------------------------
 
-# One-liner explanation for the Current Signal card
+# When all 4 mandatory indicators pass, treat the regime as Bull Run for display
+# regardless of what the HMM model detected — strong indicators override the model.
 m_count = confs.get("mandatory_count", 0)
+all_4_pass = m_count >= 4
+display_regime = REGIME_BULL if all_4_pass else current_regime
+
+# One-liner explanation for the Current Signal card
 if current_signal == SIGNAL_STRONG_BUY:
-    signal_note = "All 4/4 mandatory pass (RSI + Supertrend + EMA 200 + ADX) — highest conviction"
+    signal_note = "All 4/4 mandatory pass + HMM Bull Run — highest conviction entry"
 elif current_signal == SIGNAL_BUY:
-    signal_note = "Core 3/3 pass (RSI + Supertrend + ADX) — EMA 200 not confirmed"
-else:
-    if current_regime == REGIME_BEAR:
-        signal_note = "Bear/Crash regime detected — no long entries permitted"
-    elif current_regime == REGIME_NEUTRAL:
-        signal_note = "Neutral regime — waiting for Bull Run confirmation"
+    if all_4_pass:
+        signal_note = "All 4/4 mandatory pass — BUY confirmed (HMM Neutral overridden by indicators)"
     else:
-        failing = [c for c, v in confs.get("mandatory", {}).items() if not v]
-        if failing:
-            short_fail = [c.split("(")[0].strip() for c in failing[:2]]
-            signal_note = f"Core 3 not met — blocked by: {', '.join(short_fail)}"
-        else:
-            signal_note = "Insufficient indicator history — still warming up"
+        signal_note = "Core 3/3 pass (RSI + Supertrend + ADX) + Bull Run — EMA 200 not confirmed"
+else:
+    failing = [c for c, v in confs.get("mandatory", {}).items() if not v]
+    if failing:
+        short_fail = [c.split("(")[0].strip() for c in failing[:2]]
+        signal_note = f"Only {m_count}/4 mandatory pass — blocked by: {', '.join(short_fail)}"
+    else:
+        signal_note = "Insufficient indicator history — still warming up"
 
 # One-liner explanation for the Detected Regime card
-_regime_desc = {
-    REGIME_BULL:    "HMM detects sustained upward momentum — favorable for long positions",
-    REGIME_BEAR:    "HMM detects negative return state — protect capital, avoid longs",
-    REGIME_NEUTRAL: "HMM shows mixed market signals — no directional conviction yet",
-}
-regime_note = _regime_desc.get(current_regime, "")
+if all_4_pass and current_regime != REGIME_BULL:
+    regime_note = "All 4 mandatory indicators confirm bullish structure — overrides HMM Neutral/Bear"
+else:
+    _regime_desc = {
+        REGIME_BULL:    "HMM detects sustained upward momentum — favorable for long positions",
+        REGIME_BEAR:    "HMM detects negative return state — protect capital, avoid longs",
+        REGIME_NEUTRAL: "HMM shows mixed market signals — no directional conviction yet",
+    }
+    regime_note = _regime_desc.get(current_regime, "")
 
 col_sig, col_reg, col_price = st.columns(3)
 
@@ -568,7 +574,7 @@ regime_class = {
     REGIME_BULL:    "regime-bull",
     REGIME_BEAR:    "regime-bear",
     REGIME_NEUTRAL: "regime-neutral",
-}.get(current_regime, "regime-neutral")
+}.get(display_regime, "regime-neutral")
 
 with col_sig:
     st.markdown(
@@ -584,7 +590,7 @@ with col_reg:
     st.markdown(
         f"<div class='metric-card'>"
         f"<small>Detected Regime</small><br>"
-        f"<span class='{regime_class}' style='font-size:1.3rem;'>{current_regime}</span><br>"
+        f"<span class='{regime_class}' style='font-size:1.3rem;'>{display_regime}</span><br>"
         f"<span class='note-text'>{regime_note}</span>"
         f"</div>",
         unsafe_allow_html=True,
@@ -762,16 +768,16 @@ with st.expander("📊 Indicator Breakdown — Mandatory & Optional", expanded=T
 
     # ── Summary ───────────────────────────────────────────────────────────
     st.markdown("<br>", unsafe_allow_html=True)
-    bull = current_regime == REGIME_BULL
     if current_signal == SIGNAL_STRONG_BUY:
-        st.success("4/4 mandatory pass + Bull regime → **STRONG BUY** — all confirmations met")
+        st.success("4/4 mandatory pass + HMM Bull Run → **STRONG BUY** — highest conviction entry")
     elif current_signal == SIGNAL_BUY:
-        st.info("RSI + Supertrend + ADX pass + Bull regime → **BUY** — EMA 200 not confirmed (elevated risk)")
-    elif not bull:
-        st.warning(f"Regime is **{current_regime}** — Bull Run required for entry")
+        if all_4_pass:
+            st.info("4/4 mandatory pass → **BUY** — all indicators bullish (HMM Neutral overridden by indicator strength)")
+        else:
+            st.info("RSI + Supertrend + ADX pass + Bull Run → **BUY** — EMA 200 not confirmed (elevated risk)")
     else:
         failing = [c for c, v in mandatory.items() if not v]
-        st.error(f"Core 3 not met ({m_count}/4 mandatory pass) — blocked by: {', '.join(failing)}")
+        st.error(f"Only {m_count}/4 mandatory pass — need ≥4 or core 3 + Bull Run. Failing: {', '.join(failing)}")
 
 # ---------------------------------------------------------------------------
 # ── EQUITY CURVE

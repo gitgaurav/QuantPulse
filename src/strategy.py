@@ -447,16 +447,21 @@ def evaluate_confirmations(row: pd.Series) -> dict:
 
 def generate_signal(regime: str, mandatory_count: int, core_3_met: bool) -> str:
     """
-    Return signal based on regime and mandatory indicator results:
-      • STRONG BUY — Bull Run + all 4 mandatory pass (RSI + ST + EMA-200 + ADX)
-      • BUY        — Bull Run + core 3 pass (RSI + ST + ADX); EMA-200 may fail
-      • CASH       — regime not Bull Run, or core 3 not met
+    Return signal based on mandatory indicator results and HMM regime:
+
+      • STRONG BUY — all 4 mandatory pass AND HMM regime is Bull Run
+                     (indicators + regime both confirm the trend)
+      • BUY        — all 4 mandatory pass but HMM regime is not Bull Run
+                     (indicators override a Neutral/Bear HMM reading)
+                   — OR core 3 pass (RSI + ST + ADX) AND regime is Bull Run
+      • CASH       — fewer than 4 mandatory pass AND core 3 not confirmed
     """
-    if regime == REGIME_BULL:
-        if mandatory_count >= 4:
+    if mandatory_count >= 4:
+        if regime == REGIME_BULL:
             return SIGNAL_STRONG_BUY
-        if core_3_met:
-            return SIGNAL_BUY
+        return SIGNAL_BUY          # indicators override HMM regime
+    if core_3_met and regime == REGIME_BULL:
+        return SIGNAL_BUY
     return SIGNAL_CASH
 
 
